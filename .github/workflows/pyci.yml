@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         # we want to test our package on several versions of Python
-        python-version: [3.11]
+        python-version: [3.12]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
