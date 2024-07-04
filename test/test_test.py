@@ -1,6 +1,6 @@
-#from page_analyzer import hello_world
+from page_analyzer import hello_world
 
 
 def test_test():
-    assert 'Hello, World!' == 'Hello, World!'
+    assert '<p>Hello, World!</p>' == hello_world()
 
