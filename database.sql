@@ -1,0 +1,6 @@
+CREATE TABLE urls (
+    id int PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    name varchar(255),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+INSERT INTO urls (name) VALUES ('test');
