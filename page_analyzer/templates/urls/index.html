@@ -20,32 +20,47 @@
 </nav>
 
   </header>
+
     {% if messages %}
     <div class=flashes>
-      <div class="alert {{ messages[0][0]}}" role="alert">{{ messages[0][1] }}</div>
+      <div class="alert alert-danger" role="alert">{{ messages[0][1] }}</div>
     </div>
-    {% else %}
     {% endif %}
 
   <main class="flex-grow-1">
     <div class="container-lg mt-3">
-      <h1></h1>
+      <h1>Сайты</h1>
 
-    
-<div class="row">
-  <div class="col-12 col-md-10 col-lg-8 mx-auto border rounded-3 bg-light p-5">
-    <h1 class="display-3">Анализатор страниц</h1>
-    <p class="lead">Бесплатно проверяйте сайты на SEO-пригодность</p>
-    <form action="/urls " method="post" class="d-flex justify-content-center">
-    <label for="text" class="visually-hidden">Url для проверки</label>
-      {% if messages %}
-    <input type="text" name="url" placeholder="https://www.example.com"value="{{ messages [1][1] }}"  class="form-control form-control-lg" required>
-      {% else %}
-    <input type="text" name="url" placeholder="https://www.example.com"value=""  class="form-control form-control-lg" required>
-      {% endif %}
-    <input type="submit" class="btn btn-primary  btn-lg ms-3 px-5 text-uppercase mx-3" value="Проверить">
-</form>
-  </div>
+
+<div class="table-responsive">
+  <table class="table table-bordered table-hover text-nowrap" data-test="urls">
+    <thead>
+    <tr>
+      <th>ID</th>
+      <th>Имя</th>
+      <th>Последняя проверка</th>
+      <th>Код ответа</th>
+    </tr>
+    </thead>
+    <tbody>
+        {% for url in urls %}
+        <tr>
+          <td>{{ url[0] }}</td>
+          <td>
+            <a href="{{ url_for('show_url', id = url[0]) }}">
+              {{ url[1] }}
+            </a>
+          </td>
+
+          <td>{{ url[2] }}</td>
+
+
+          <td></td>
+
+        </tr>
+        {% endfor %}
+    </tbody>
+  </table>
 </div>
 
     </div>
