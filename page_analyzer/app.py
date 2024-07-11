@@ -10,8 +10,6 @@ load_dotenv()
 DATABASE_URL = os.getenv('DATABASE_URL')
 SECRET_KEY = os.getenv('SECRET_KEY')
 
-conn = psycopg2.connect(DATABASE_URL)
-
 app = Flask(__name__)
 app.config['SECRET_KEY'] = SECRET_KEY
 
@@ -31,6 +29,7 @@ def index():
 
 @app.post('/urls')
 def post_url():
+    conn = psycopg2.connect(DATABASE_URL)
     messages = get_flashed_messages(with_categories=True)
     print(messages)
     url = str(request.form.to_dict()['url'])
@@ -70,6 +69,7 @@ def post_url():
 
 @app.get('/urls')
 def get_urls():
+    conn = psycopg2.connect(DATABASE_URL)
     messages = get_flashed_messages(with_categories=True)
     with conn:
         with conn.cursor() as curr:
@@ -102,6 +102,7 @@ def get_urls():
 
 @app.route('/urls/<id>')
 def show_url(id):
+    conn = psycopg2.connect(DATABASE_URL)
     messages = get_flashed_messages(with_categories=True)
     print(messages)
     with conn:
@@ -126,6 +127,7 @@ def show_url(id):
 
 @app.post('/urls/<id>/checks')
 def check(id):
+    conn = psycopg2.connect(DATABASE_URL)
     with conn:
         with conn.cursor() as curr:
             curr.execute(f"INSERT INTO url_checks (url_id) VALUES ({id});")
