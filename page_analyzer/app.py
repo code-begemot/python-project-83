@@ -11,7 +11,6 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 SECRET_KEY = os.getenv('SECRET_KEY')
 
 conn = psycopg2.connect(DATABASE_URL)
-curr = conn.cursor()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = SECRET_KEY
@@ -40,19 +39,26 @@ def post_url():
         print((is_valid))
         o = urlparse(url)
         norm_url = o.netloc
-        curr.execute(f"SELECT EXISTS(SELECT 1 FROM urls"
-                     f" WHERE name = '{norm_url}');")
-        exist = curr.fetchone()
+        with conn:
+            with conn.cursor() as curr:
+                curr.execute(f"SELECT EXISTS(SELECT 1 FROM urls"
+                             f" WHERE name = '{norm_url}');")
+                exist = curr.fetchone()
         print(exist)
         if exist[0]:
-            curr.execute(f"SELECT id FROM urls WHERE name = '{norm_url}';")
-            id = curr.fetchone()[0]
+            with conn:
+                with conn.cursor() as curr:
+                    curr.execute(f"SELECT id FROM urls"
+                                 f" WHERE name = '{norm_url}';")
+                    id = curr.fetchone()[0]
             flash("Страница уже существует", category='alert-info')
             return redirect(url_for('show_url', id=id))
-        curr.execute(f"INSERT INTO urls (name) VALUES ('{norm_url}');")
-        conn.commit()
-        curr.execute(f"SELECT id FROM urls WHERE name = '{norm_url}';")
-        id = curr.fetchone()[0]
+        with conn:
+            with conn.cursor() as curr:
+                curr.execute(f"INSERT INTO urls (name) VALUES ('{norm_url}');")
+                conn.commit()
+                curr.execute(f"SELECT id FROM urls WHERE name = '{norm_url}';")
+                id = curr.fetchone()[0]
         flash('Страница успешно добавлена', category='alert-success')
         return redirect(url_for('show_url', id=id), code=302)
     else:
@@ -65,22 +71,28 @@ def post_url():
 @app.get('/urls')
 def get_urls():
     messages = get_flashed_messages(with_categories=True)
-    curr.execute('SELECT EXISTS(SELECT 1 FROM url_checks);')
-    exist = curr.fetchone()
+    with conn:
+        with conn.cursor() as curr:
+            curr.execute('SELECT EXISTS(SELECT 1 FROM url_checks);')
+            exist = curr.fetchone()
     print(exist)
     if exist[0]:
-        curr.execute('SELECT DISTINCT ON (urls.id) urls.id, urls.name,'
-                     'url_checks.created_at, status_code'
-                     'FROM url_checks '
-                     'INNER JOIN urls ON url_checks.url_id = urls.id'
-                     'ORDER BY urls.id DESC, created_at DESC;')
-        urls = curr.fetchall()
-        curr.execute('SELECT COUNT(*) FROM urls;')
-        test = curr.fetchall()
+        with conn:
+            with conn.cursor() as curr:
+                curr.execute('SELECT DISTINCT ON (urls.id) urls.id, urls.name,'
+                             ' url_checks.created_at, status_code '
+                             'FROM url_checks '
+                             'INNER JOIN urls ON url_checks.url_id = urls.id '
+                             'ORDER BY urls.id DESC, created_at DESC;')
+                urls = curr.fetchall()
+                curr.execute('SELECT COUNT(*) FROM urls;')
+                test = curr.fetchall()
         print(test)
     else:
-        curr.execute("SELECT * FROM urls;")
-        urls = curr.fetchall()
+        with conn:
+            with conn.cursor() as curr:
+                curr.execute("SELECT * FROM urls;")
+                urls = curr.fetchall()
         print(urls)
     return render_template(
         'urls/index.html',
@@ -92,12 +104,14 @@ def get_urls():
 def show_url(id):
     messages = get_flashed_messages(with_categories=True)
     print(messages)
-    curr.execute(f"SELECT * FROM urls WHERE id = {id};")
-    url = curr.fetchone()
-    curr.execute(f"SELECT * FROM url_checks"
-                 f"WHERE url_id = {id} AND"
-                 f"EXISTS (SELECT * FROM url_checks) ORDER BY id DESC;")
-    checks = curr.fetchall()
+    with conn:
+        with conn.cursor() as curr:
+            curr.execute(f"SELECT * FROM urls WHERE id = {id};")
+            url = curr.fetchone()
+            curr.execute(f"SELECT * FROM url_checks "
+                         f"WHERE url_id = {id} AND "
+                         f"EXISTS (SELECT * FROM url_checks) ORDER BY id DESC;")
+            checks = curr.fetchall()
     print(url)
     print(checks)
     messages = get_flashed_messages(with_categories=True)
@@ -112,10 +126,12 @@ def show_url(id):
 
 @app.post('/urls/<id>/checks')
 def check(id):
-    curr.execute(f"INSERT INTO url_checks (url_id) VALUES ({id});")
-    conn.commit()
-    checks = curr.execute(f"SELECT id, created_at FROM url_checks"
-                          f"WHERE url_id = {id};")
-    print(curr.fetchall())
+    with conn:
+        with conn.cursor() as curr:
+            curr.execute(f"INSERT INTO url_checks (url_id) VALUES ({id});")
+            conn.commit()
+            checks = curr.execute(f"SELECT id, created_at FROM url_checks "
+                                  f"WHERE url_id = {id};")
+    print(checks)
     flash('Страница успешно проверена', category='alert-success')
     return redirect(url_for('show_url', id=id, checks=checks))
