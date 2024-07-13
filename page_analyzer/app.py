@@ -22,7 +22,7 @@ print(SECRET_KEY)
 #     return "<p>Hello, World!</p>"
 
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
     messages = get_flashed_messages(with_categories=True)
     return render_template('index.html', messages=messages)
@@ -60,7 +60,7 @@ def post_url():
     else:
         flash('Некорректный URL', category='alert-danger')
         flash(url, category='invalid-url')
-        return redirect(url_for('index'), code=422)
+        return render_template('index.html', url=url), 422
 
 
 @app.get('/urls')
