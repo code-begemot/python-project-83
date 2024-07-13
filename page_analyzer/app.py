@@ -76,8 +76,9 @@ def get_urls():
             with conn.cursor() as curr:
                 curr.execute('SELECT DISTINCT ON (urls.id) urls.id, urls.name,'
                              ' url_checks.created_at, status_code '
-                             'FROM url_checks '
-                             'INNER JOIN urls ON url_checks.url_id = urls.id '
+                             'FROM urls '
+                             'LEFT JOIN url_checks '
+                             'ON urls.id = url_checks.url_id '
                              'ORDER BY urls.id DESC, created_at DESC;')
                 urls = curr.fetchall()
     else:
@@ -121,11 +122,13 @@ def check(id):
             curr.execute(f"SELECT name FROM urls "
                          f"WHERE id = {id};")
             url = curr.fetchall()[0][0]
-            r = requests.get(url)
+
             try:
+                r = requests.get(url)
                 r.raise_for_status()
-            except requests.exceptions.RequestException:
+            except requests.exceptions.RequestException as err:
                 flash('Произошла ошибка при проверке', category='alert-danger')
+                return redirect(url_for('show_url', id=id))
             else:
                 code = r.status_code
                 html = r.text
@@ -143,4 +146,4 @@ def check(id):
                                       f" FROM url_checks "
                                       f"WHERE url_id = {id};")
                 flash('Страница успешно проверена', category='alert-success')
-    return redirect(url_for('show_url', id=id, checks=checks))
+                return redirect(url_for('show_url', id=id))
