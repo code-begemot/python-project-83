@@ -126,7 +126,7 @@ def check(id):
             try:
                 r = requests.get(url)
                 r.raise_for_status()
-            except requests.exceptions.RequestException as err:
+            except requests.exceptions.RequestException:
                 flash('Произошла ошибка при проверке', category='alert-danger')
                 return redirect(url_for('show_url', id=id))
             else:
@@ -142,8 +142,5 @@ def check(id):
                              f" VALUES ({id}, {code}, '{h1}', "
                              f"'{title}', '{description}');")
                 conn.commit()
-                checks = curr.execute(f"SELECT id, status_code, created_at "
-                                      f" FROM url_checks "
-                                      f"WHERE url_id = {id};")
                 flash('Страница успешно проверена', category='alert-success')
                 return redirect(url_for('show_url', id=id))
