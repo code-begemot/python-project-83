@@ -1,3 +1,5 @@
+# !/usr/bin/env python3
+
 from flask import (Flask, redirect, render_template, request,
                    url_for, get_flashed_messages, flash)
 from dotenv import load_dotenv
