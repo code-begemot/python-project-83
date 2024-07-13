@@ -6,6 +6,7 @@ import os
 from urllib.parse import urlparse
 import validators
 import requests
+from bs4 import BeautifulSoup
 
 load_dotenv()
 DATABASE_URL = os.getenv('DATABASE_URL')
@@ -24,19 +25,15 @@ print(SECRET_KEY)
 @app.route('/')
 def index():
     messages = get_flashed_messages(with_categories=True)
-    print(messages)
     return render_template('index.html', messages=messages)
 
 
 @app.post('/urls')
 def post_url():
     conn = psycopg2.connect(DATABASE_URL)
-    messages = get_flashed_messages(with_categories=True)
-    print(messages)
     url = str(request.form.to_dict()['url'])
     is_valid = validators.url(url)
     if is_valid and len(url) < 256:
-        print((is_valid))
         o = urlparse(url)
         norm_url = f"{o.scheme}://{o.netloc}"
         with conn:
@@ -44,7 +41,6 @@ def post_url():
                 curr.execute(f"SELECT EXISTS(SELECT 1 FROM urls"
                              f" WHERE name = '{norm_url}');")
                 exist = curr.fetchone()
-        print(exist)
         if exist[0]:
             with conn:
                 with conn.cursor() as curr:
@@ -62,9 +58,8 @@ def post_url():
         flash('Страница успешно добавлена', category='alert-success')
         return redirect(url_for('show_url', id=id), code=302)
     else:
-        print('you')
         flash('Некорректный URL', category='alert-danger')
-        flash(url, category='error')
+        flash(url, category='invalid-url')
         return redirect(url_for('index'))
 
 
@@ -76,7 +71,6 @@ def get_urls():
         with conn.cursor() as curr:
             curr.execute('SELECT EXISTS(SELECT 1 FROM url_checks);')
             exist = curr.fetchone()
-    print(exist)
     if exist[0]:
         with conn:
             with conn.cursor() as curr:
@@ -86,15 +80,11 @@ def get_urls():
                              'INNER JOIN urls ON url_checks.url_id = urls.id '
                              'ORDER BY urls.id DESC, created_at DESC;')
                 urls = curr.fetchall()
-                curr.execute('SELECT COUNT(*) FROM urls;')
-                test = curr.fetchall()
-        print(test)
     else:
         with conn:
             with conn.cursor() as curr:
                 curr.execute("SELECT * FROM urls;")
                 urls = curr.fetchall()
-        print(urls)
     return render_template(
         'urls/index.html',
         urls=urls, messages=messages
@@ -105,7 +95,6 @@ def get_urls():
 def show_url(id):
     conn = psycopg2.connect(DATABASE_URL)
     messages = get_flashed_messages(with_categories=True)
-    print(messages)
     with conn:
         with conn.cursor() as curr:
             curr.execute(f"SELECT * FROM urls WHERE id = {id};")
@@ -114,8 +103,6 @@ def show_url(id):
                          f"WHERE url_id = {id} AND "
                          f"EXISTS (SELECT * FROM url_checks) ORDER BY id DESC;")
             checks = curr.fetchall()
-    print(url)
-    print(checks)
     messages = get_flashed_messages(with_categories=True)
     return render_template(
         'urls/show.html',
@@ -141,9 +128,16 @@ def check(id):
                 flash('Произошла ошибка при проверке', category='alert-danger')
             else:
                 code = r.status_code
+                html = r.text
+                soup = BeautifulSoup(html, 'html.parser')
+                h1 = soup.h1.string
+                title = soup.title.string
+                description = soup.find('meta',
+                                        {'name': 'description'})['content']
                 curr.execute(f"INSERT INTO url_checks "
-                             f"(url_id, status_code) "
-                             f" VALUES ({id}, {code});")
+                             f"(url_id, status_code, h1, title, description) "
+                             f" VALUES ({id}, {code}, '{h1}', "
+                             f"'{title}', '{description}');")
                 conn.commit()
                 checks = curr.execute(f"SELECT id, status_code, created_at "
                                       f" FROM url_checks "
