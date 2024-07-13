@@ -9,3 +9,4 @@ coverage.xml
 .idea/
 .env
 test/
+.github/workflows/pyci.yml
