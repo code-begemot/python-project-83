@@ -5,6 +5,7 @@ import psycopg2
 import os
 from urllib.parse import urlparse
 import validators
+import requests
 
 load_dotenv()
 DATABASE_URL = os.getenv('DATABASE_URL')
@@ -37,7 +38,7 @@ def post_url():
     if is_valid and len(url) < 256:
         print((is_valid))
         o = urlparse(url)
-        norm_url = o.netloc
+        norm_url = f"{o.scheme}://{o.netloc}"
         with conn:
             with conn.cursor() as curr:
                 curr.execute(f"SELECT EXISTS(SELECT 1 FROM urls"
@@ -130,10 +131,22 @@ def check(id):
     conn = psycopg2.connect(DATABASE_URL)
     with conn:
         with conn.cursor() as curr:
-            curr.execute(f"INSERT INTO url_checks (url_id) VALUES ({id});")
-            conn.commit()
-            checks = curr.execute(f"SELECT id, created_at FROM url_checks "
-                                  f"WHERE url_id = {id};")
-    print(checks)
-    flash('Страница успешно проверена', category='alert-success')
+            curr.execute(f"SELECT name FROM urls "
+                         f"WHERE id = {id};")
+            url = curr.fetchall()[0][0]
+            r = requests.get(url)
+            try:
+                r.raise_for_status()
+            except requests.exceptions.RequestException:
+                flash('Произошла ошибка при проверке', category='alert-danger')
+            else:
+                code = r.status_code
+                curr.execute(f"INSERT INTO url_checks "
+                             f"(url_id, status_code) "
+                             f" VALUES ({id}, {code});")
+                conn.commit()
+                checks = curr.execute(f"SELECT id, status_code, created_at "
+                                      f" FROM url_checks "
+                                      f"WHERE url_id = {id};")
+                flash('Страница успешно проверена', category='alert-success')
     return redirect(url_for('show_url', id=id, checks=checks))
