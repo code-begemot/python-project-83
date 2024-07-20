@@ -7,6 +7,8 @@ from urllib.parse import urlparse
 import validators
 import requests
 from bs4 import BeautifulSoup
+from contextlib import contextmanager
+from page_analyzer import db
 
 load_dotenv()
 DATABASE_URL = os.getenv('DATABASE_URL')
@@ -15,11 +17,15 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 app = Flask(__name__)
 app.config['SECRET_KEY'] = SECRET_KEY
 
-print(SECRET_KEY)
 
-# @app.route("/")
-# def hello_world():
-#     return "<p>Hello, World!</p>"
+@contextmanager
+def conn_context_manager(url):
+    conn = psycopg2.connect(url)
+    try:
+        yield conn.cursor()
+    finally:
+        conn.commit()
+        conn.close()
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -30,62 +36,39 @@ def index():
 
 @app.post('/urls')
 def post_url():
-    conn = psycopg2.connect(DATABASE_URL)
     url = str(request.form.to_dict()['url'])
     is_valid = validators.url(url)
     if is_valid and len(url) < 256:
         o = urlparse(url)
         norm_url = f"{o.scheme}://{o.netloc}"
-        with conn:
-            with conn.cursor() as curr:
-                curr.execute(f"SELECT EXISTS(SELECT 1 FROM urls"
-                             f" WHERE name = '{norm_url}');")
-                exist = curr.fetchone()
+        with conn_context_manager(DATABASE_URL) as curr:
+            curr.execute(db.is_exist_url(norm_url))
+            exist = curr.fetchone()
+        print(exist)
         if exist[0]:
-            with conn:
-                with conn.cursor() as curr:
-                    curr.execute(f"SELECT id FROM urls"
-                                 f" WHERE name = '{norm_url}';")
-                    id = curr.fetchone()[0]
+            with conn_context_manager(DATABASE_URL) as curr:
+                curr.execute(db.id_by_url(norm_url))
+                id = curr.fetchone()[0]
             flash("Страница уже существует", category='alert-info')
             return redirect(url_for('show_url', id=id))
-        with conn:
-            with conn.cursor() as curr:
-                curr.execute(f"INSERT INTO urls (name) VALUES ('{norm_url}');")
-                conn.commit()
-                curr.execute(f"SELECT id FROM urls WHERE name = '{norm_url}';")
-                id = curr.fetchone()[0]
+        with conn_context_manager(DATABASE_URL) as curr:
+            print(curr)
+            curr.execute(db.insert_url(norm_url))
+            curr.execute(db.id_by_url(norm_url))
+            id = curr.fetchone()[0]
+            print(curr.fetchone())
         flash('Страница успешно добавлена', category='alert-success')
         return redirect(url_for('show_url', id=id), code=302)
     else:
-        flash('Некорректный URL', category='alert-danger')
-        flash(url, category='invalid-url')
         return render_template('index.html', url=url), 422
 
 
 @app.get('/urls')
 def get_urls():
-    conn = psycopg2.connect(DATABASE_URL)
     messages = get_flashed_messages(with_categories=True)
-    with conn:
-        with conn.cursor() as curr:
-            curr.execute('SELECT EXISTS(SELECT 1 FROM url_checks);')
-            exist = curr.fetchone()
-    if exist[0]:
-        with conn:
-            with conn.cursor() as curr:
-                curr.execute('SELECT DISTINCT ON (urls.id) urls.id, urls.name,'
-                             ' url_checks.created_at, status_code '
-                             'FROM urls '
-                             'LEFT JOIN url_checks '
-                             'ON urls.id = url_checks.url_id '
-                             'ORDER BY urls.id DESC, created_at DESC;')
-                urls = curr.fetchall()
-    else:
-        with conn:
-            with conn.cursor() as curr:
-                curr.execute("SELECT * FROM urls;")
-                urls = curr.fetchall()
+    with conn_context_manager(DATABASE_URL) as curr:
+        curr.execute(db.get_urls())
+        urls = curr.fetchall()
     return render_template(
         'urls/index.html',
         urls=urls, messages=messages
@@ -94,17 +77,12 @@ def get_urls():
 
 @app.route('/urls/<id>')
 def show_url(id):
-    conn = psycopg2.connect(DATABASE_URL)
     messages = get_flashed_messages(with_categories=True)
-    with conn:
-        with conn.cursor() as curr:
-            curr.execute(f"SELECT * FROM urls WHERE id = {id};")
-            url = curr.fetchone()
-            curr.execute(f"SELECT * FROM url_checks "
-                         f"WHERE url_id = {id} AND "
-                         f"EXISTS (SELECT * FROM url_checks) ORDER BY id DESC;")
-            checks = curr.fetchall()
-    messages = get_flashed_messages(with_categories=True)
+    with conn_context_manager(DATABASE_URL) as curr:
+        curr.execute(db.url_by_id(id))
+        url = curr.fetchone()
+        curr.execute(db.checks_by_id(id))
+        checks = curr.fetchall()
     return render_template(
         'urls/show.html',
         url=url,
@@ -116,31 +94,33 @@ def show_url(id):
 
 @app.post('/urls/<id>/checks')
 def check(id):
-    conn = psycopg2.connect(DATABASE_URL)
-    with conn:
-        with conn.cursor() as curr:
-            curr.execute(f"SELECT name FROM urls "
-                         f"WHERE id = {id};")
-            url = curr.fetchall()[0][0]
-
+    with conn_context_manager(DATABASE_URL) as curr:
+        curr.execute(db.url_by_id(id))
+        url = curr.fetchone()[1]
+        print(url)
+        try:
+            r = requests.get(url)
+            r.raise_for_status()
+        except requests.exceptions.RequestException:
+            flash('Произошла ошибка при проверке', category='alert-danger')
+            return redirect(url_for('show_url', id=id))
+        else:
+            code = r.status_code
+            html = r.text
+            soup = BeautifulSoup(html, 'html.parser')
             try:
-                r = requests.get(url)
-                r.raise_for_status()
-            except requests.exceptions.RequestException:
-                flash('Произошла ошибка при проверке', category='alert-danger')
-                return redirect(url_for('show_url', id=id))
-            else:
-                code = r.status_code
-                html = r.text
-                soup = BeautifulSoup(html, 'html.parser')
                 h1 = soup.h1.string
+            except AttributeError:
+                h1 = ""
+            try:
                 title = soup.title.string
+            except AttributeError:
+                title = ""
+            try:
                 description = soup.find('meta',
                                         {'name': 'description'})['content']
-                curr.execute(f"INSERT INTO url_checks "
-                             f"(url_id, status_code, h1, title, description) "
-                             f" VALUES ({id}, {code}, '{h1}', "
-                             f"'{title}', '{description}');")
-                conn.commit()
-                flash('Страница успешно проверена', category='alert-success')
-                return redirect(url_for('show_url', id=id))
+            except TypeError:
+                description = ""
+            curr.execute(db.insert_checks(id, code, h1, title, description))
+            flash('Страница успешно проверена', category='alert-success')
+            return redirect(url_for('show_url', id=id))

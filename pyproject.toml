@@ -20,8 +20,6 @@ beautifulsoup4 = "^4.12.3"
 
 [tool.poetry.group.dev.dependencies]
 flake8 = "^7.0.0"
-pytest = "^8.0.0"
-pytest-cov = "^4.1.0"
 
 [build-system]
 requires = ["poetry-core"]
